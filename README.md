@@ -37,7 +37,7 @@ https://openpyxl.readthedocs.io/en/stable/
 https://docs.python.org/3/library/pathlib.html
 
 # A kapott eredmeny:
-Besorolt NEISS-esetek: 616 691
+Besorolt NEISS-esetek: 616 691, 
 Országos becslés a Weight mező alapján: 21 180 647
 <img width="2080" height="2083" alt="sportag_es_nem_szerint" src="https://github.com/user-attachments/assets/70cfdeaa-c9bb-4f64-98f7-aa7628ade983" />
 
