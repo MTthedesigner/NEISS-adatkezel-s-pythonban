@@ -28,6 +28,7 @@ serulesbetolt: afuggveny beolvassa a megadott excel fajlokat kivalasztja a sport
 diagment: a beolvasott serulesi adatokbol elkesziti es kepkent elmenti a sportagankenti ferfi no bontasu diagramot
 
 # alkamlazott irodalmak:
+https://www.cpsc.gov/cgibin/NEISSQuery/home.aspx
 https://www.geeksforgeeks.org/python/reading-excel-file-using-python/
 https://pandas.pydata.org/docs/reference/api/pandas.read_excel.html
 https://docs.python.org/3/library/contextlib.html
