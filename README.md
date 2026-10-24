@@ -2,16 +2,16 @@ https://www.cpsc.gov/cgibin/NEISSQuery/home.aspx
 # NEISS sportserülések elemzése (2016–2025)
 
 ## alkalmazott libaryk:
--contextlib ---> a fuggvenyt lehet vele blokkent hasznalni neiisadatokmegnyit megnyitja az excelt 
--pathlib ---> a mappautvonalak es fileok kezelesere (excel fileok + eredmeny mappa)
--io ---> ha az excel "hibas" (maskepp van az elrendezes, stb) a javitott verziot tarolja a memoriaban
--zipfile ---> metaadat javitasahoz
--xml.etree ---> hibas datummezok eltavolitasa
+-contextlib ---> a fuggvenyt lehet vele blokkent hasznalni neiisadatokmegnyit megnyitja az excelt <br />
+-pathlib ---> a mappautvonalak es fileok kezelesere (excel fileok + eredmeny mappa)<br />
+-io ---> ha az excel "hibas" (maskepp van az elrendezes, stb) a javitott verziot tarolja a memoriaban<br />
+-zipfile ---> metaadat javitasahoz<br />
+-xml.etree ---> hibas datummezok eltavolitasa<br />
 
--matplotlib.pyplot ---> diagram
--pandas ---> adatkezeleshez , cvs-be mentes
--openpyxl ---> excel lapok es sorok beolvasasa
--matplotlib.ticker ---> diagram
+-matplotlib.pyplot ---> diagram<br />
+-pandas ---> adatkezeleshez , cvs-be mentes<br />
+-openpyxl ---> excel lapok es sorok beolvasasa<br />
+-matplotlib.ticker ---> diagram<br />
 
 ## program mukodese:
 sportagak kigyujtve egy halmazba ami alapjan keresi a program a nevet es ami neve legyen
