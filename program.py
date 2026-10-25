@@ -167,7 +167,7 @@ def diagment(data):
 		ax.bar_label(bars, labels=labels, padding=4, fontsize=8)
 	ax.set_xlim(0, nemenkent.to_numpy().max() * 1.24)
 	ax.set_title("Sportserülések sportág és nem szerint (2016–2025)", fontsize=16, pad=14)
-	ax.set_xlabel("Sérülések száma (millio)")
+	ax.set_xlabel("Sérülések száma (millió)")
 	ax.set_ylabel("")
 	ax.xaxis.set_major_formatter(FuncFormatter(lambda value, _: f"{value / 1_000_000:g}"))
 	ax.grid(axis="x", color="#dce3e6", linewidth=0.8)
