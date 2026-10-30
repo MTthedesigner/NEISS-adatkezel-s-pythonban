@@ -1,6 +1,7 @@
 from contextlib import contextmanager
 from pathlib import Path
 from io import BytesIO
+import re
 from zipfile import ZIP_DEFLATED, ZipFile
 from xml.etree import ElementTree
 
@@ -93,11 +94,58 @@ def beolvasas(file_path):
 		sheet.reset_dimensions()
 		rows = sheet.iter_rows(values_only=True)
 		next(rows, None)
-		labels = {}
+		product_labels = {}
+		diagnosis_labels = {}
+		body_part_labels = {}
 		for row in rows:
-			if row[0] == "PROD" and row[1] is not None and row[3] is not None:
-				labels[egysegesites(row[1])] = str(row[3]).upper()
-		return labels
+			if row[0] in ("PROD", "DIAG", "BDYPT") and row[1] is not None and row[3] is not None:
+				labels = {
+					"PROD": product_labels,
+					"DIAG": diagnosis_labels,
+					"BDYPT": body_part_labels,
+				}[row[0]]
+				labels[egysegesites(row[1])] = str(row[3]).strip().upper()
+		return product_labels, diagnosis_labels, body_part_labels
+
+
+def reszletes_serulestipus(narrative, body_part_label, diagnosis_code):
+	narrative = str(narrative or "").upper()
+	specifikus_serulesek = (
+		(r"\bACL\b|ANTERIOR CRUCIATE", "ACL-sérülés (elülső keresztszalag)"),
+		(r"\bMCL\b|MEDIAL COLLATERAL", "MCL-sérülés (belső oldalszalag)"),
+		(r"\bPCL\b|POSTERIOR CRUCIATE", "PCL-sérülés (hátsó keresztszalag)"),
+		(r"\bLCL\b|LATERAL COLLATERAL", "LCL-sérülés (külső oldalszalag)"),
+		(r"\bATFL\b|ANTERIOR TALOFIBULAR", "ATFL-sérülés (bokaszalag)"),
+		(r"\bCFL\b|CALCANEOFIBULAR", "CFL-sérülés (bokaszalag)"),
+		(r"\bMENISC(?:US|AL)\b", "Meniszkuszsérülés"),
+		(r"\bACHILLES\b", "Achilles-ín sérülés"),
+		(r"ROTATOR CUFF", "Rotátorköpeny-sérülés"),
+	)
+	for pattern, label in specifikus_serulesek:
+		if re.search(pattern, narrative):
+			return label
+
+	diagnosis = egysegesites(diagnosis_code)
+	testreszek = {
+		"SHOULDER": "Váll",
+		"WRIST": "Csukló",
+		"KNEE": "Térd",
+		"ANKLE": "Boka",
+		"FOOT": "Lábfej",
+	}
+	serulesek = {
+		"53": "zúzódás / horzsolás",
+		"55": "ficam",
+		"57": "törés",
+		"59": "vágott seb",
+		"64": "rándulás / húzódás",
+	}
+	body_part_label = str(body_part_label or "").upper()
+	for body_part_name, testresz in testreszek.items():
+		if body_part_name in body_part_label:
+			serules = serulesek.get(diagnosis, "egyéb sérülés")
+			return f"{testresz} – {serules}"
+	return None
 
 
 def sportrend(product_label): 
@@ -115,10 +163,18 @@ def sportrend(product_label):
 
 def serulesbetolt(files):
 	osszadat = []
-	required_columns = ["CPSC_Case_Number", "Sex", "Product_1", "Weight"]
+	required_columns = [
+		"CPSC_Case_Number",
+		"Sex",
+		"Product_1",
+		"Diagnosis",
+		"Body_Part",
+		"Narrative_1",
+		"Weight",
+	]
 	for file_path in files:
 		print(f"Feldolgozás: {file_path.stem.replace('neiss', '')}...", flush=True)
-		product_labels = beolvasas(file_path)
+		product_labels, diagnosis_labels, body_part_labels = beolvasas(file_path)
 		with neiisadatokmegnyit(file_path) as workbook:
 			sheet = workbook.worksheets[0]
 			sheet.reset_dimensions()
@@ -131,6 +187,7 @@ def serulesbetolt(files):
 					continue
 				product_kod = egysegesites(row[oszlop_indexes["Product_1"]])
 				sport = sportrend(product_labels.get(product_kod))
+				diagnosis_kod = egysegesites(row[oszlop_indexes["Diagnosis"]])
 				weight = row[oszlop_indexes["Weight"]]
 				if sport is None or weight is None:
 					continue
@@ -140,12 +197,34 @@ def serulesbetolt(files):
 					continue
 				nem = row[oszlop_indexes["Sex"]]
 				nem = {0: "Ismeretlen", 1: "Férfi", 2: "Nő"}.get(nem, "Ismeretlen")
-				esetek.append({"sport": sport, "nem": nem, "Weight": weight})
+				serulestipus = diagnosis_labels.get(
+					diagnosis_kod,
+					f"ISMERETLEN ({diagnosis_kod})" if diagnosis_kod else "ISMERETLEN SÉRÜLÉSTÍPUS",
+				)
+				reszletes_tipus = reszletes_serulestipus(
+					row[oszlop_indexes["Narrative_1"]],
+					body_part_labels.get(
+						egysegesites(row[oszlop_indexes["Body_Part"]]), ""
+					),
+					diagnosis_kod,
+				)
+				esetek.append(
+					{
+						"sport": sport,
+						"nem": nem,
+						"serulestipus": serulestipus,
+						"reszletes_serules": reszletes_tipus,
+						"Weight": weight,
+					}
+				)
 			osszadat.extend(esetek)
 
 	if not osszadat:
 		raise ValueError("Nem találtam feldolgozható NEISS-adatot.")
-	return pd.DataFrame(osszadat, columns=["sport", "nem", "Weight"])
+	return pd.DataFrame(
+		osszadat,
+		columns=["sport", "nem", "serulestipus", "reszletes_serules", "Weight"],
+	)
 
 
 def diagment(data):
@@ -178,6 +257,95 @@ def diagment(data):
 	fig.savefig(OUTPUT_FOLDER / "sportag_es_nem_szerint.png", dpi=160)
 	plt.close(fig)
 
+
+def serulestipusdiagram(data):
+	serulesek = data.dropna(subset=["reszletes_serules"])
+	if serulesek.empty:
+		raise ValueError(
+			"Nem találtam a leírás vagy testrész alapján részletesen besorolható sérülést."
+		)
+	serulestipusok = serulesek.pivot_table(
+		index="sport",
+		columns="reszletes_serules",
+		values="Weight",
+		aggfunc="sum",
+		fill_value=0,
+	)
+	kiemelt_tipusok = [
+		"ACL-sérülés (elülső keresztszalag)",
+		"MCL-sérülés (belső oldalszalag)",
+		"PCL-sérülés (hátsó keresztszalag)",
+		"LCL-sérülés (külső oldalszalag)",
+		"Meniszkuszsérülés",
+		"ATFL-sérülés (bokaszalag)",
+		"CFL-sérülés (bokaszalag)",
+		"Achilles-ín sérülés",
+		"Rotátorköpeny-sérülés",
+		"Boka – rándulás / húzódás",
+		"Boka – törés",
+		"Boka – ficam",
+		"Boka – egyéb sérülés",
+		"Térd – rándulás / húzódás",
+		"Térd – törés",
+		"Térd – ficam",
+	]
+	tipus_sorrend = [
+		tipus for tipus in kiemelt_tipusok if tipus in serulestipusok.columns
+	]
+	if not tipus_sorrend:
+		raise ValueError(
+			"Nem találtam ACL/MCL-, boka- vagy térdsérülésként besorolható esetet."
+		)
+	oszlopok = 2
+	sorok = (len(tipus_sorrend) + oszlopok - 1) // oszlopok
+	fig, axes = plt.subplots(
+		sorok,
+		oszlopok,
+		figsize=(15, max(5, sorok * 3)),
+		squeeze=False,
+	)
+	fig.patch.set_facecolor("white")
+	for index, tipus in enumerate(tipus_sorrend):
+		ax = axes[index // oszlopok][index % oszlopok]
+		ax.set_facecolor("#f7f9fa")
+		adat = serulestipusok[tipus].nlargest(5).sort_values()
+		ax.barh(adat.index, adat.values, color="#177e89")
+		ax.margins(x=0.2)
+		ax.set_title(f"{tipus} (összesen: {serulestipusok[tipus].sum():,.0f})", fontsize=10)
+		ax.set_xlabel("Becsült esetszám")
+		ax.grid(axis="x", color="#dce3e6", linewidth=0.8)
+		ax.set_axisbelow(True)
+		ax.tick_params(axis="y", labelsize=8)
+		for bar in ax.containers:
+			ax.bar_label(
+				bar,
+				labels=[f"{ertek:,.0f}".replace(",", " ") for ertek in adat.values],
+				padding=3,
+				fontsize=8,
+			)
+	for index in range(len(tipus_sorrend), sorok * oszlopok):
+		axes[index // oszlopok][index % oszlopok].set_visible(False)
+	fig.text(
+		0.5,
+		0.995,
+		"Részletes sérüléstípusok sportáganként (2016–2025)",
+		ha="center",
+		va="top",
+		fontsize=16,
+	)
+	fig.text(
+		0.5,
+		0.977,
+		"ACL/MCL/PCL/LCL, boka, térd és hasonló sérülések; panelek: 5 leggyakoribb sportág",
+		ha="center",
+		va="top",
+		fontsize=10,
+	)
+	fig.tight_layout(rect=(0, 0, 1, 0.96))
+	fig.savefig(OUTPUT_FOLDER / "sportag_es_serulestipus_szerint.png", dpi=160)
+	plt.close(fig)
+
+
 def main():
 	files = sorted(FOLDER.glob("neiss20*.xlsx"))
 	if not files:
@@ -198,7 +366,41 @@ def main():
 		.rename(columns={"sport": "Sportág", "nem": "Nem", "Weight": "Becsült esetszám"})
 	)
 	nemeenkent.to_csv(OUTPUT_FOLDER / "sportag_es_nem.csv", index=False, encoding="utf-8-sig")
+	serulestipusonkent = (
+		serulesek.groupby(["sport", "serulestipus"], as_index=False)["Weight"]
+		.sum()
+		.rename(
+			columns={
+				"sport": "Sportág",
+				"serulestipus": "Sérüléstípus",
+				"Weight": "Becsült esetszám",
+			}
+		)
+	)
+	serulestipusonkent.to_csv(
+		OUTPUT_FOLDER / "sportag_es_serulestipus.csv",
+		index=False,
+		encoding="utf-8-sig",
+	)
+	reszletes_serulesenkent = (
+		serulesek.dropna(subset=["reszletes_serules"])
+		.groupby(["sport", "reszletes_serules"], as_index=False)["Weight"]
+		.sum()
+		.rename(
+			columns={
+				"sport": "Sportág",
+				"reszletes_serules": "Részletes sérülés",
+				"Weight": "Becsült esetszám",
+			}
+		)
+	)
+	reszletes_serulesenkent.to_csv(
+		OUTPUT_FOLDER / "sportag_es_reszletes_serules.csv",
+		index=False,
+		encoding="utf-8-sig",
+	)
 	diagment(serulesek)
+	serulestipusdiagram(serulesek)
 
 	print(f"Besorolt NEISS-esetek: {len(serulesek):,}".replace(",", " "))
 	print(f"Országos becslés a Weight mező alapján: {serulesek['Weight'].sum():,.0f}".replace(",", " "))
