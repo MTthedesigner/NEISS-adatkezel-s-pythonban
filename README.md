@@ -43,4 +43,5 @@ Országos becslés a Weight mező alapján: 21 180 647
 <img width="2080" height="2083" alt="sportag_es_nem_szerint" src="https://github.com/user-attachments/assets/70cfdeaa-c9bb-4f64-98f7-aa7628ade983" />
 <img width="594" height="957" alt="image" src="https://github.com/user-attachments/assets/57ba9aaa-12b1-4272-acf6-e556391aa3f5" />
 <img width="1257" height="671" alt="image" src="https://github.com/user-attachments/assets/f7a3952d-9a42-4bd8-88d5-f8b574b76c1c" />
+<img width="1107" height="893" alt="image" src="https://github.com/user-attachments/assets/0c41c14b-7439-4d0c-b18d-e042ba5b97c7" />
 
