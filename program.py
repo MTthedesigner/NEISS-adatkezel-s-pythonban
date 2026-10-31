@@ -21,6 +21,7 @@ SPORTAGAK = [
 	("Softball", ("SOFTBALL",)),
 	("Kosárlabda", ("BASKETBALL",)),
 	("Labdarúgás", ("SOCCER",)),
+	("Kézilabda", ("HANDBALL", "HAND BALL")),
 	("Röplabda", ("VOLLEYBALL",)),
 	("Hoki", ("HOCKEY",)),
 	("Asztalitenisz", ("TABLE TENNIS",)),
@@ -213,6 +214,10 @@ def serulesbetolt(files):
 						"sport": sport,
 						"nem": nem,
 						"serulestipus": serulestipus,
+						"testrész": body_part_labels.get(
+							egysegesites(row[oszlop_indexes["Body_Part"]]),
+							"ISMERETLEN TESTRÉSZ",
+						),
 						"reszletes_serules": reszletes_tipus,
 						"Weight": weight,
 					}
@@ -223,7 +228,14 @@ def serulesbetolt(files):
 		raise ValueError("Nem találtam feldolgozható NEISS-adatot.")
 	return pd.DataFrame(
 		osszadat,
-		columns=["sport", "nem", "serulestipus", "reszletes_serules", "Weight"],
+		columns=[
+			"sport",
+			"nem",
+			"serulestipus",
+			"testrész",
+			"reszletes_serules",
+			"Weight",
+		],
 	)
 
 
@@ -346,6 +358,97 @@ def serulestipusdiagram(data):
 	plt.close(fig)
 
 
+def kezilabda_diagram(data):
+	kezilabda = data[data["sport"] == "Kézilabda"]
+	if kezilabda.empty:
+		raise ValueError("Nem találtam kézilabdához besorolt esetet.")
+
+	serulestipusok = kezilabda.groupby("serulestipus")["Weight"].sum().nlargest(12)
+	testrészek = kezilabda.groupby("testrész")["Weight"].sum().nlargest(10)
+	serulesnevek = {
+		"STRAIN, SPRAIN": "Rándulás / húzódás",
+		"FRACTURE": "Törés",
+		"CONTUSIONS, ABR.": "Zúzódás / horzsolás",
+		"LACERATION": "Vágott seb",
+		"CONCUSSION": "Agyrázkódás",
+		"DISLOCATION": "Ficam",
+		"INTERNAL INJURY": "Belső sérülés",
+		"OTHER": "Egyéb",
+		"HEMATOMA": "Vérömleny",
+		"NERVE DAMAGE": "Idegkárosodás",
+		"POISONING": "Mérgezés",
+		"DERMA/CONJUNCT": "Bőr-/kötőhártya-sérülés",
+	}
+	testrésznevek = {
+		"KNEE": "Térd",
+		"ANKLE": "Boka",
+		"FINGER": "Ujj",
+		"FOOT": "Lábfej",
+		"HAND": "Kéz",
+		"WRIST": "Csukló",
+		"LOWER LEG": "Lábszár",
+		"HEAD": "Fej",
+		"FACE": "Arc",
+		"LOWER TRUNK": "Alsó törzs",
+		"UPPER TRUNK": "Felső törzs",
+		"UPPER TRUNK(OLD)": "Felső törzs",
+		"SHOULDER": "Váll",
+		"UPPER LEG": "Comb",
+	}
+	serulestipusok.index = [
+		serulesnevek.get(tipus.split(" - ", 1)[-1], tipus.split(" - ", 1)[-1].title())
+		for tipus in serulestipusok.index
+	]
+	testrészek.index = [
+		testrésznevek.get(testresz.split(" - ", 1)[-1], testresz.split(" - ", 1)[-1].title())
+		for testresz in testrészek.index
+	]
+
+	fig, axes = plt.subplots(1, 2, figsize=(15, 8))
+	fig.patch.set_facecolor("white")
+	for ax, values, title, color in (
+		(axes[0], serulestipusok, "Sérüléstípusok", "#177e89"),
+		(axes[1], testrészek, "Érintett testrészek", "#e07a5f"),
+	):
+		values = values.sort_values()
+		ax.set_facecolor("#f7f9fa")
+		bars = ax.barh(values.index, values.values, color=color)
+		ax.set_title(title, fontsize=13)
+		ax.set_xlabel("Országos becsült esetszám")
+		ax.grid(axis="x", color="#dce3e6", linewidth=0.8)
+		ax.set_axisbelow(True)
+		ax.tick_params(axis="y", labelsize=9)
+		ax.margins(x=0.2)
+		ax.bar_label(
+			bars,
+			labels=[f"{ertek:,.0f}".replace(",", " ") for ertek in values.values],
+			padding=3,
+			fontsize=8,
+		)
+	fig.suptitle("Kézilabda-sérülések (2016–2025)", fontsize=16)
+	fig.tight_layout(rect=(0, 0, 1, 0.95))
+	fig.savefig(OUTPUT_FOLDER / "kezilabda_serulesek.png", dpi=160)
+	plt.close(fig)
+
+	serulesenkent = (
+		kezilabda.groupby("serulestipus", as_index=False)["Weight"]
+		.sum()
+		.assign(Bontás="Sérüléstípus")
+		.rename(columns={"serulestipus": "Kategória", "Weight": "Becsült esetszám"})
+	)
+	testreszenkent = (
+		kezilabda.groupby("testrész", as_index=False)["Weight"]
+		.sum()
+		.assign(Bontás="Testrész")
+		.rename(columns={"testrész": "Kategória", "Weight": "Becsült esetszám"})
+	)
+	pd.concat([serulesenkent, testreszenkent], ignore_index=True).to_csv(
+		OUTPUT_FOLDER / "kezilabda_serulesek.csv",
+		index=False,
+		encoding="utf-8-sig",
+	)
+
+
 def main():
 	files = sorted(FOLDER.glob("neiss20*.xlsx"))
 	if not files:
@@ -401,6 +504,7 @@ def main():
 	)
 	diagment(serulesek)
 	serulestipusdiagram(serulesek)
+	kezilabda_diagram(serulesek)
 
 	print(f"Besorolt NEISS-esetek: {len(serulesek):,}".replace(",", " "))
 	print(f"Országos becslés a Weight mező alapján: {serulesek['Weight'].sum():,.0f}".replace(",", " "))
