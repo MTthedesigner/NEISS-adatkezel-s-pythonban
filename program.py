@@ -449,6 +449,51 @@ def kezilabda_diagram(data):
 	)
 
 
+def kezilabda_reszletes_serules_diagram(data):
+	kezilabda = data[data["Sportág"] == "Kézilabda"].copy()
+	if kezilabda.empty:
+		raise ValueError("Nem találtam részletes sérülésadatot kézilabdához.")
+
+	kezilabda = kezilabda.sort_values("Becsült esetszám", ascending=True)
+	fig, ax = plt.subplots(figsize=(13, max(8, len(kezilabda) * 0.42)))
+	fig.patch.set_facecolor("white")
+	ax.set_facecolor("#f7f9fa")
+	bars = ax.barh(
+		kezilabda["Részletes sérülés"],
+		kezilabda["Becsült esetszám"],
+		color="#177e89",
+	)
+	ax.set_title(
+		"Kézilabda részletes sérüléstípusai (2016–2025)",
+		fontsize=14,
+		pad=14,
+	)
+	ax.set_xlabel("Országos becsült esetszám")
+	ax.set_ylabel("")
+	ax.grid(axis="x", color="#dce3e6", linewidth=0.8)
+	ax.set_axisbelow(True)
+	ax.tick_params(axis="y", labelsize=9)
+	ax.margins(x=0.18)
+	ax.bar_label(
+		bars,
+		labels=[
+			f"{ertek:,.0f}".replace(",", " ")
+			for ertek in kezilabda["Becsült esetszám"]
+		],
+		padding=3,
+		fontsize=8,
+	)
+	fig.tight_layout()
+	fig.savefig(OUTPUT_FOLDER / "kezilabda_reszletes_serulesek.png", dpi=160)
+	plt.close(fig)
+
+	kezilabda.to_csv(
+		OUTPUT_FOLDER / "kezilabda_reszletes_serulesek.csv",
+		index=False,
+		encoding="utf-8-sig",
+	)
+
+
 def main():
 	files = sorted(FOLDER.glob("neiss20*.xlsx"))
 	if not files:
@@ -502,6 +547,7 @@ def main():
 		index=False,
 		encoding="utf-8-sig",
 	)
+	kezilabda_reszletes_serules_diagram(reszletes_serulesenkent)
 	diagment(serulesek)
 	serulestipusdiagram(serulesek)
 	kezilabda_diagram(serulesek)
